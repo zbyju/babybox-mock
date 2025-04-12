@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./docker/dev/backend
+    volumes:
+      - ./backend:/app
+    ports:
+      - "3000:3000"
+    environment:
+      - GO_ENV=development
+
+  frontend:
+    build:
+      context: ./docker/dev/frontend
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    command: pnpm run dev --host

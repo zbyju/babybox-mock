@@ -1,0 +1,164 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    # Only run on tagged commits (so you only release when you create a tag)
+    tags:
+      - "v*"
+
+jobs:
+  build-windows:
+    name: Build for Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20" # adjust as needed
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+          cache: "pnpm"
+
+      - name: Install pnpm globally
+        run: npm install -g pnpm
+
+      - name: Install Frontend dependencies
+        working-directory: frontend
+        run: pnpm install
+
+      - name: Build Svelte Frontend
+        working-directory: frontend
+        run: pnpm run build
+
+      - name: Build Go Backend (Windows)
+        working-directory: backend
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: go build -o babybox-mock.exe main.go
+
+      - name: Build Installer using Inno Setup
+        # Install Inno Setup via Chocolatey (pre-installed on windows-latest)
+        run: |
+          choco install innosetup -y
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "$(System.DefaultWorkingDirectory)\babybox-mock.iss"
+        shell: powershell
+
+      - name: Archive Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-installer
+          path: "**/*.exe"
+          if-no-files-found: error
+
+  build-ubuntu:
+    name: Build for Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+          cache: "pnpm"
+
+      - name: Install pnpm globally
+        run: npm install -g pnpm
+
+      - name: Install Frontend dependencies
+        working-directory: frontend
+        run: pnpm install
+
+      - name: Build Svelte Frontend
+        working-directory: frontend
+        run: pnpm run build
+
+      - name: Build Go Backend (Linux)
+        working-directory: backend
+        env:
+          GOOS: linux
+          GOARCH: amd64
+        run: go build -o babybox-mock main.go
+
+      - name: Install fpm and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install --no-document fpm
+
+      - name: Create .deb package with fpm
+        working-directory: backend
+        run: |
+          fpm -s dir -t deb -n babybox-mock -v 1.0 --prefix /usr/local/bin babybox-mock
+          # Move the resulting .deb package to a known location
+          mkdir -p ../release-artifacts
+          mv babybox-mock_1.0_amd64.deb ../release-artifacts/
+
+      - name: Archive Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ubuntu-installer
+          path: release-artifacts/*.deb
+
+  release:
+    name: Create GitHub Release and Upload Artifacts
+    needs: [build-windows, build-ubuntu]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: windows-installer
+          path: release-artifacts/windows
+
+      - name: Download Ubuntu Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ubuntu-installer
+          path: release-artifacts/ubuntu
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Windows Installer to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release-artifacts/windows/*.exe
+          asset_name: babybox-mock-windows-installer.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload Ubuntu Installer to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release-artifacts/ubuntu/*.deb
+          asset_name: babybox-mock-ubuntu-installer.deb
+          asset_content_type: application/vnd.debian.binary-package
