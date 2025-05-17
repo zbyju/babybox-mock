@@ -1,0 +1,27 @@
+project_name: babybox-mock
+builds:
+  - main: ./main.go
+    goos:
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    binary: babybox-mock
+
+archives:
+  - format: zip
+
+nfpms:
+  - id: babybox-mock
+    packager: deb
+    formats:
+      - deb
+    bindir: /usr/local/bin
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
