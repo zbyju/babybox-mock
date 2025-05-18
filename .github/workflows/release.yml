@@ -1,68 +1,144 @@
-name: Release
+name: Wails Release Build
 
 on:
   push:
     tags:
-      - "*"
-
-permissions:
-  contents: write
+      - "v*" # Triggers the workflow on version tags like v1.0, v20.15.10
 
 jobs:
-  release:
+  create_release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }} # URL for uploading assets
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            Automated release for ${{ github.ref_name }}.
+            Binaries for Windows, macOS, and Linux are attached below.
+          draft: false # Set to false to publish immediately
+          prerelease: contains(github.ref_name, '-') # Example: v1.0.0-beta marks as pre-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_and_upload:
+    name: Build for ${{ matrix.friendly_name }} and Upload
+    needs: create_release # Ensures release is created before attempting to upload
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
+        include:
+          - os: macos-latest
+            friendly_name: "macOS (amd64)"
+            build_platform: "darwin"
+            asset_name_suffix: "-macos-amd64.zip"
+            output_name: "babybox-mock.app" # Name Wails gives to the .app
+            final_asset_name_prefix: "babybox-mock" # Your app's base name
+            asset_content_type: "application/zip"
+          - os: ubuntu-latest
+            friendly_name: "Linux (amd64)"
+            build_platform: "linux" # Wails might use 'linux/amd64'
+            asset_name_suffix: "-linux-amd64.zip" # For the zipped binary
+            output_name: "babybox-mock" # Name Wails gives to the Linux binary
+            final_asset_name_prefix: "babybox-mock"
+            asset_content_type: "application/zip"
+            # Add any necessary Linux dependencies here
+            setup_command: |
+              sudo apt-get update
+              sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev
+          - os: windows-latest
+            friendly_name: "Windows (amd64)"
+            build_platform: "windows" # Wails might use 'windows/amd64'
+            asset_name_suffix: "-windows-amd64.exe"
+            output_name: "babybox-mock.exe" # Name Wails gives to the .exe
+            final_asset_name_prefix: "babybox-mock"
+            asset_content_type: "application/vnd.microsoft.portable-executable"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.23" # Use your project's Go version
 
-      - name: Set up Node.js + pnpm
-        uses: actions/setup-node@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "20" # Use your project's Node version
 
-      - name: Install frontend dependencies
-        run: npm install
-        working-directory: frontend
-
-      - name: Build frontend
-        run: npm run build
-        working-directory: frontend
-
-      - name: Install Wails
+      # Install Wails CLI - conditional for different OS if needed, but often `go install` works cross-platform
+      - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+      - name: Add Wails CLI to PATH
+        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
-      - name: Install Linux system dependencies for Wails
-        if: matrix.os == 'ubuntu-22.04'
+      # Install Linux build dependencies if specified in matrix
+      - name: Install Linux dependencies
+        if: matrix.setup_command
+        run: ${{ matrix.setup_command }}
+
+      - name: Install Frontend Dependencies
+        # If your frontend is in a sub-directory, e.g., 'frontend':
+        working-directory: ./frontend
+        run: npm install
+      # If package.json is in the root:
+      # run: npm install
+
+      - name: Build Wails Application
+        id: build_step
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
-            libglib2.0-dev \
-            libgdk-pixbuf2.0-dev \
-            libpango1.0-dev \
-            libcairo2-dev \
-            pkg-config \
-            build-essential \
-            curl \
-            git \
-            ca-certificates
+          APP_NAME="${{ matrix.final_asset_name_prefix }}"
+          TAG_VERSION="${{ github.ref_name }}" # e.g., v1.0.0
+          FINAL_ASSET_NAME="${APP_NAME}-${TAG_VERSION}${MATRIX_ASSET_NAME_SUFFIX}"
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+          # Wails build command:
+          # The -o flag names the output binary/bundle.
+          # Wails places outputs in 'build/bin/' relative to project root.
+          # The -platform flag might not be strictly necessary if building on the target OS natively.
+          # However, it's good for clarity and for cases where Wails might support cross-compilation for some targets.
+
+          echo "Building for ${{ matrix.build_platform }}..."
+          # The output name from Wails is ${{ matrix.output_name }}
+          wails build -clean -o "${{ matrix.output_name }}" -platform ${{ matrix.build_platform }}
+
+          # Determine the path to the built artifact
+          BUILT_ARTIFACT_PATH="build/bin/${{ matrix.output_name }}"
+
+          # Package the artifact (e.g., zip the macOS .app or Linux binary)
+          if [ "${{ matrix.build_platform }}" == "darwin" ]; then
+            echo "Zipping macOS app..."
+            zip -r "${FINAL_ASSET_NAME}" "${BUILT_ARTIFACT_PATH}"
+            echo "asset_path=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.build_platform }}" == "linux" ]; then
+            echo "Zipping Linux binary..."
+            zip "${FINAL_ASSET_NAME}" "${BUILT_ARTIFACT_PATH}" # Built artifact path is just the binary name here
+            echo "asset_path=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.build_platform }}" == "windows" ]; then
+            echo "Windows .exe is ready."
+            # We will upload the .exe directly, but rename it to include the version tag
+            mv "${BUILT_ARTIFACT_PATH}" "${FINAL_ASSET_NAME}"
+            echo "asset_path=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+          echo "Final asset name: ${FINAL_ASSET_NAME}"
+          echo "asset_name_for_upload=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
+        env:
+          MATRIX_ASSET_NAME_SUFFIX: ${{ matrix.asset_name_suffix }}
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
         with:
-          # either 'goreleaser' (default) or 'goreleaser-pro'
-          distribution: goreleaser
-          # 'latest', 'nightly', or a semver
-          version: "~> v2"
-          args: release --clean
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.build_step.outputs.asset_path }}
+          asset_name: ${{ steps.build_step.outputs.asset_name_for_upload }}
+          asset_content_type: ${{ matrix.asset_content_type }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
