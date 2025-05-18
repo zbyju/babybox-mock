@@ -11,7 +11,7 @@ permissions:
 jobs:
   create_release:
     name: Create GitHub Release
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22.04 # Using a specific version is good practice
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }} # URL for uploading assets
       release_id: ${{ steps.create_release.outputs.id }}
@@ -38,24 +38,25 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            friendly_name: "macOS (amd64)"
-            build_platform: "darwin"
-            asset_name_suffix: "-macos-amd64.zip"
-            output_name: "babybox-mock.app" # Name Wails gives to the .app
-            final_asset_name_prefix: "babybox-mock" # Your app's base name
+            friendly_name: "macOS (amd64)" # Consider changing to "macOS (Universal)" and platform "darwin/universal"
+            build_platform: "darwin" # For Universal: "darwin/universal"
+            asset_name_suffix: "-macos-amd64.zip" # For Universal: "-macos-universal.zip"
+            # output_name is now the base name for Wails -o flag
+            output_name: "babybox-mock" # MODIFIED: No .app extension here
+            final_asset_name_prefix: "babybox-mock"
             asset_content_type: "application/zip"
           - os: ubuntu-22.04
             friendly_name: "Linux (amd64)"
-            build_platform: "linux" # Wails might use 'linux/amd64'
-            asset_name_suffix: "-linux-amd64.zip" # For the zipped binary
-            output_name: "babybox-mock" # Name Wails gives to the Linux binary
+            build_platform: "linux/amd64" # Explicitly amd64
+            asset_name_suffix: "-linux-amd64.zip"
+            output_name: "babybox-mock"
             final_asset_name_prefix: "babybox-mock"
             asset_content_type: "application/zip"
           - os: windows-latest
             friendly_name: "Windows (amd64)"
-            build_platform: "windows" # Wails might use 'windows/amd64'
+            build_platform: "windows/amd64" # Explicitly amd64
             asset_name_suffix: "-windows-amd64.exe"
-            output_name: "babybox-mock.exe" # Name Wails gives to the .exe
+            output_name: "babybox-mock.exe"
             final_asset_name_prefix: "babybox-mock"
             asset_content_type: "application/vnd.microsoft.portable-executable"
 
@@ -66,12 +67,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23" # Use your project's Go version
+          go-version: "1.22" # Changed from 1.23 to a more common stable, adjust if 1.23 is required
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20" # Use your project's Node version
+          node-version: "20"
 
       - name: Install Linux system dependencies for Wails
         if: matrix.os == 'ubuntu-22.04'
@@ -81,68 +82,101 @@ jobs:
             libgtk-3-dev \
             libwebkit2gtk-4.0-dev \
             libglib2.0-dev \
-            libgdk-pixbuf2.0-dev \
             libpango1.0-dev \
             libcairo2-dev \
             pkg-config \
-            build-essential \
-            curl \
-            git \
-            ca-certificates
+            build-essential # build-essential often covers many C toolchain needs
+            # Removed curl, git, ca-certificates as they are usually pre-installed on runners
 
-      # Install Wails CLI - conditional for different OS if needed, but often `go install` works cross-platform
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
       - name: Add Wails CLI to PATH
         run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
       - name: Install Frontend Dependencies
-        # If your frontend is in a sub-directory, e.g., 'frontend':
-        working-directory: ./frontend
+        working-directory: ./frontend # Ensure this is the correct path to your frontend's package.json
         run: npm install
-      # If package.json is in the root:
-      # run: npm install
+
+      # Optional: Add frontend build step if needed
+      # - name: Build Frontend
+      #   working-directory: ./frontend
+      #   run: npm run build # Or your specific frontend build command
 
       - name: Build Wails Application
         id: build_step
         run: |
           APP_NAME="${{ matrix.final_asset_name_prefix }}"
-          TAG_VERSION="${{ github.ref_name }}" # e.g., v1.0.0
+          TAG_VERSION="${{ github.ref_name }}"
           FINAL_ASSET_NAME="${APP_NAME}-${TAG_VERSION}${MATRIX_ASSET_NAME_SUFFIX}"
 
-          # Wails build command:
-          # The -o flag names the output binary/bundle.
-          # Wails places outputs in 'build/bin/' relative to project root.
-          # The -platform flag might not be strictly necessary if building on the target OS natively.
-          # However, it's good for clarity and for cases where Wails might support cross-compilation for some targets.
+          echo "Current working directory: $(pwd)"
+          echo "Listing files in current directory:"
+          ls -la
+          echo "Listing files in build directory (if exists) before build:"
+          ls -la build || echo "Build directory does not exist yet."
 
-          echo "Building for ${{ matrix.build_platform }}..."
-          # The output name from Wails is ${{ matrix.output_name }}
-          wails build -clean -o "${{ matrix.output_name }}" -platform ${{ matrix.build_platform }}
+          echo "Building for ${{ matrix.build_platform }} with output name argument: ${{ matrix.output_name }}"
+          # Wails build command with -clean and specific output name for the binary/bundle base
+          wails build -clean -o "${{ matrix.output_name }}" -platform "${{ matrix.build_platform }}"
 
-          # Determine the path to the built artifact
-          BUILT_ARTIFACT_PATH="build/bin/${{ matrix.output_name }}"
+          echo "Listing files in build/bin directory after build:"
+          ls -R build/bin || echo "build/bin directory not found after build."
 
-          # Package the artifact (e.g., zip the macOS .app or Linux binary)
-          if [ "${{ matrix.build_platform }}" == "darwin" ]; then
-            echo "Zipping macOS app..."
-            zip -r "${FINAL_ASSET_NAME}" "${BUILT_ARTIFACT_PATH}"
-            echo "asset_path=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
-          elif [ "${{ matrix.build_platform }}" == "linux" ]; then
-            echo "Zipping Linux binary..."
-            zip "${FINAL_ASSET_NAME}" "${BUILT_ARTIFACT_PATH}" # Built artifact path is just the binary name here
-            echo "asset_path=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
-          elif [ "${{ matrix.build_platform }}" == "windows" ]; then
-            echo "Windows .exe is ready."
-            # We will upload the .exe directly, but rename it to include the version tag
-            mv "${BUILT_ARTIFACT_PATH}" "${FINAL_ASSET_NAME}"
-            echo "asset_path=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
+          # Determine the actual path to the built artifact
+          # This needs to be robust based on the platform
+          ACTUAL_ARTIFACT_NAME_IN_BIN=""
+          if [[ "${{ matrix.build_platform }}" == "darwin" || "${{ matrix.build_platform }}" == "darwin/universal" ]]; then
+            # For macOS, Wails creates an .app bundle. matrix.output_name is the base.
+            ACTUAL_ARTIFACT_NAME_IN_BIN="${{ matrix.output_name }}.app"
+          elif [[ "${{ matrix.build_platform }}" == "windows/amd64" ]]; then
+            # For Windows, matrix.output_name already includes .exe
+            ACTUAL_ARTIFACT_NAME_IN_BIN="${{ matrix.output_name }}"
+          else
+            # For Linux, matrix.output_name is the direct binary name
+            ACTUAL_ARTIFACT_NAME_IN_BIN="${{ matrix.output_name }}"
+          fi
+          BUILT_ARTIFACT_PATH="build/bin/${ACTUAL_ARTIFACT_NAME_IN_BIN}"
+
+          echo "Expected artifact path: ${BUILT_ARTIFACT_PATH}"
+
+          # Package the artifact
+          if [[ "${{ matrix.build_platform }}" == "darwin" || "${{ matrix.build_platform }}" == "darwin/universal" ]]; then
+            echo "Zipping macOS app: ${BUILT_ARTIFACT_PATH}"
+            if [ -d "${BUILT_ARTIFACT_PATH}" ]; then # Check if it's a directory
+              zip -r "${FINAL_ASSET_NAME}" "${BUILT_ARTIFACT_PATH}"
+              echo "asset_path=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
+            else
+              echo "Error: macOS .app bundle not found or is not a directory at ${BUILT_ARTIFACT_PATH}!"
+              exit 1
+            fi
+          elif [[ "${{ matrix.build_platform }}" == "linux/amd64" ]]; then
+            echo "Zipping Linux binary: ${BUILT_ARTIFACT_PATH}"
+            if [ -f "${BUILT_ARTIFACT_PATH}" ]; then # Check if it's a file
+              zip "${FINAL_ASSET_NAME}" "${BUILT_ARTIFACT_PATH}"
+              echo "asset_path=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
+            else
+              echo "Error: Linux binary not found at ${BUILT_ARTIFACT_PATH}!"
+              exit 1
+            fi
+          elif [[ "${{ matrix.build_platform }}" == "windows/amd64" ]]; then
+            echo "Windows .exe is ready: ${BUILT_ARTIFACT_PATH}"
+            if [ -f "${BUILT_ARTIFACT_PATH}" ]; then # Check if it's a file
+              mv "${BUILT_ARTIFACT_PATH}" "${FINAL_ASSET_NAME}" # Rename to include version tag for direct upload
+              echo "asset_path=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
+            else
+              echo "Error: Windows .exe not found at ${BUILT_ARTIFACT_PATH}!"
+              exit 1
+            fi
+          else
+            echo "Error: Unknown build platform for packaging - ${{ matrix.build_platform }}"
+            exit 1
           fi
 
-          echo "Final asset name: ${FINAL_ASSET_NAME}"
+          echo "Final asset name for upload: ${FINAL_ASSET_NAME}"
           echo "asset_name_for_upload=${FINAL_ASSET_NAME}" >> $GITHUB_OUTPUT
         env:
           MATRIX_ASSET_NAME_SUFFIX: ${{ matrix.asset_name_suffix }}
+          # CGO_ENABLED=1 is implicitly handled by Wails/Go but can be set if needed
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
