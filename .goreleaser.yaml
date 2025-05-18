@@ -1,27 +1,30 @@
-project_name: babybox-mock
+version: 2
+
 builds:
-  - main: ./main.go
+  - id: babybox-mock
+    main: ./main.go
     goos:
-      - windows
       - linux
+      - windows
       - darwin
     goarch:
       - amd64
       - arm64
+    ldflags:
+      - -s -w
     binary: babybox-mock
 
 archives:
-  - format: zip
-
-nfpms:
-  - id: babybox-mock
-    packager: deb
-    formats:
-      - deb
-    bindir: /usr/local/bin
+  - id: default
+    builds:
+      - babybox-mock
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: "checksums.txt"
 
-snapshot:
-  name_template: "{{ .Tag }}-next"
+release:
+  github:
+    owner: zbyju
+    name: babybox-mock
