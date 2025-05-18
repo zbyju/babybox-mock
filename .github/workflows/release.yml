@@ -5,6 +5,9 @@ on:
     tags:
       - "v*" # Triggers the workflow on version tags like v1.0, v20.15.10
 
+permissions:
+  contents: write
+
 jobs:
   create_release:
     name: Create GitHub Release
