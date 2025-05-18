@@ -30,7 +30,7 @@ jobs:
         working-directory: frontend
 
       - name: Build frontend
-        run: npm build
+        run: npm run build
         working-directory: frontend
 
       - name: Install Wails
