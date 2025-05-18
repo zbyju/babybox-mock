@@ -44,7 +44,7 @@ jobs:
             output_name: "babybox-mock.app" # Name Wails gives to the .app
             final_asset_name_prefix: "babybox-mock" # Your app's base name
             asset_content_type: "application/zip"
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             friendly_name: "Linux (amd64)"
             build_platform: "linux" # Wails might use 'linux/amd64'
             asset_name_suffix: "-linux-amd64.zip" # For the zipped binary
