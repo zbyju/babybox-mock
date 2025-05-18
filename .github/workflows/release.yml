@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "*"
 
 jobs:
   release:
@@ -13,10 +13,10 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: "1.23"
 
@@ -24,14 +24,13 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: "20"
-      - run: npm install -g pnpm
 
       - name: Install frontend dependencies
-        run: pnpm install
+        run: npm install
         working-directory: frontend
 
       - name: Build frontend
-        run: pnpm build
+        run: npm build
         working-directory: frontend
 
       - name: Install Wails
@@ -41,9 +40,8 @@ jobs:
         run: wails build
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5
+        uses: goreleaser/goreleaser-action@v6
         with:
-          version: latest
+          distribution: goreleaser
+          version: "~> v2"
           args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
