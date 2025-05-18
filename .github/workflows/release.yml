@@ -11,7 +11,7 @@ permissions:
 jobs:
   create_release:
     name: Create GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }} # URL for uploading assets
       release_id: ${{ steps.create_release.outputs.id }}
