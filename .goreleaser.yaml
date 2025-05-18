@@ -14,8 +14,18 @@ builds:
       - -s -w
     binary: babybox-mock
 
+    hooks:
+      pre:
+        - npm install --prefix frontend
+        - npm run build --prefix frontend
+        - wails build
+
+    skip: true
+
 archives:
   - id: default
+    files:
+      - build/bin/babybox-mock
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:

@@ -36,13 +36,6 @@ jobs:
         run: npm run build
         working-directory: frontend
 
-      - name: Show current working directory
-        run: pwd
-
-      - name: Debug list Go files
-        if: runner.os != 'Windows'
-        run: find . -name '*.go'
-
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
@@ -62,9 +55,6 @@ jobs:
             curl \
             git \
             ca-certificates
-
-      - name: Build Wails App
-        run: wails build
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
