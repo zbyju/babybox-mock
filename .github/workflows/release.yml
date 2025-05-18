@@ -51,10 +51,6 @@ jobs:
             output_name: "babybox-mock" # Name Wails gives to the Linux binary
             final_asset_name_prefix: "babybox-mock"
             asset_content_type: "application/zip"
-            # Add any necessary Linux dependencies here
-            setup_command: |
-              sudo apt-get update
-              sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev
           - os: windows-latest
             friendly_name: "Windows (amd64)"
             build_platform: "windows" # Wails might use 'windows/amd64'
@@ -77,16 +73,28 @@ jobs:
         with:
           node-version: "20" # Use your project's Node version
 
+      - name: Install Linux system dependencies for Wails
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libglib2.0-dev \
+            libgdk-pixbuf2.0-dev \
+            libpango1.0-dev \
+            libcairo2-dev \
+            pkg-config \
+            build-essential \
+            curl \
+            git \
+            ca-certificates
+
       # Install Wails CLI - conditional for different OS if needed, but often `go install` works cross-platform
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
       - name: Add Wails CLI to PATH
         run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
-      # Install Linux build dependencies if specified in matrix
-      - name: Install Linux dependencies
-        if: matrix.setup_command
-        run: ${{ matrix.setup_command }}
 
       - name: Install Frontend Dependencies
         # If your frontend is in a sub-directory, e.g., 'frontend':
