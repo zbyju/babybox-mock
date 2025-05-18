@@ -16,9 +16,6 @@ builds:
 
 archives:
   - id: default
-    builds:
-      - babybox-mock
-    format: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
