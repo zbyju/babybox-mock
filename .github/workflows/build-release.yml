@@ -50,6 +50,7 @@ jobs:
 
       - name: Install front-end dependencies
         run: pnpm install --frozen-lockfile
+        working-directory: ./frontend
 
       - name: Build with Wails
         uses: dAppServer/wails-build-action@main
