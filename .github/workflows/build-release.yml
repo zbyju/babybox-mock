@@ -10,22 +10,63 @@ jobs:
       fail-fast: false
       matrix:
         build:
-          - { name: babybox-mock, platform: windows/amd64, os: windows-latest }
-          - { name: babybox-mock, platform: linux/amd64, os: ubuntu-latest }
-          - { name: babybox-mock, platform: darwin/arm64, os: macos-latest }
+          - name: babybox-mock
+            os: windows-latest
+            platform: windows/amd64
+            nsis: true
+          - name: babybox-mock
+            os: ubuntu-latest
+            platform: linux/amd64
+            nsis: false
+          - name: babybox-mock
+            os: macos-latest
+            platform: darwin/arm64
+            nsis: false
 
     runs-on: ${{ matrix.build.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: dAppServer/wails-build-action@main
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Set up Node.js & cache pnpm store
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18.x"
+          cache: "pnpm"
+
+      - name: Install pnpm CLI
+        uses: pnpm/action-setup@v2
+        with:
+          version: 7
+
+      - name: Install front-end dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build with Wails
+        uses: dAppServer/wails-build-action@main
         with:
           build-name: ${{ matrix.build.name }}
           build-platform: ${{ matrix.build.platform }}
           wails-version: "v2.9.0"
           go-version: "1.21"
           node-version: "18.x"
-          nsis: true
+          nsis: ${{ matrix.build.nsis }}
+
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.build.name }}-${{ matrix.build.platform }}
+          path: |
+            build/bin/*
+            build/dist/*.exe
+            build/dist/*.dmg
+            build/dist/*.AppImage
