@@ -1,0 +1,24 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "babybox-mock",
+  "outputfilename": "babybox-mock",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm run build",
+  "frontend:dev:watcher": "pnpm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Zbyněk Juřica",
+    "email": "zbynek.jurica@gmail.com"
+  },
+  "info": {
+    "companyName": "MONTEL",
+    "productName": "Babybox Mock",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2025 MONTEL",
+    "comments": "Babybox Mock Application"
+  },
+  "nsis": {
+    "languages": ["Czech"],
+    "installDirectory": "BabyboxMock"
+  }
+}
