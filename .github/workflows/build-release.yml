@@ -38,17 +38,17 @@ jobs:
 
       - name: Install pnpm CLI
         uses: pnpm/action-setup@v4
-        working-directory: ./frontend
         with:
           version: 10
           run_install: false
+        working-directory: ./frontend
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
-        working-directory: ./frontend
         with:
           node-version: "22.x"
           cache: "pnpm"
+        working-directory: ./frontend
 
       - name: Install front-end dependencies
         run: pnpm install --frozen-lockfile
