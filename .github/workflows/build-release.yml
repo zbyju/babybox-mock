@@ -6,6 +6,9 @@ on:
 
 jobs:
   build:
+    permissions:
+      contents: write
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -63,11 +66,15 @@ jobs:
           node-version: "22.x"
           nsis: ${{ matrix.build.nsis }}
 
+      - name: Set sanitized platform
+        run: |
+          echo "sanitized_platform=${{ matrix.build.platform//\//- }}" >> $GITHUB_OUTPUT
+
       - name: Upload build artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.build.name }}-${{ matrix.build.platform }}
+          name: ${{ matrix.build.name }}-${{ steps.set_sanitized.outputs.sanitized_platform }}
           path: |
             build/bin/*
             build/dist/*.exe
