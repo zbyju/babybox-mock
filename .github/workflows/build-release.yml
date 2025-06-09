@@ -62,7 +62,7 @@ jobs:
       - name: Build with Wails
         uses: dAppServer/wails-build-action@main
         with:
-          build-name: ${{ matrix.build.name }}
+          build-name: ${{ matrix.build.name }}-${{ matrix.build.sanitized_platform }}
           build-platform: ${{ matrix.build.platform }}
           wails-version: "v2.9.3"
           go-version: "1.23"
@@ -79,3 +79,10 @@ jobs:
             build/dist/*.exe
             build/dist/*.dmg
             build/dist/*.AppImage
+      - name: Upload binaries to GitHub Release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: build/dist/
+          asset_name: ${{ matrix.build.name }}-${{ matrix.build.sanitized_platform }}.${{ runner.os == 'windows-latest' && 'zip' || runner.os == 'macos-latest' && 'dmg' || 'AppImage' }}
+          asset_content_type: application/octet-stream
